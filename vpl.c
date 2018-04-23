@@ -29,7 +29,12 @@ size_t readline(char **buf, size_t *len, size_t *readlen, size_t linelen) {
 			*len *= 2;
 		}
 
-		*readlen += read(0, *buf + *readlen, *len - *readlen);
+		ssize_t read_ret = read(0, *buf + *readlen, *len - *readlen);
+		if (read_ret <= 0) {
+			return 0;
+		}
+		*readlen += read_ret;
+		//*readlen += read(0, *buf + *readlen, *len - *readlen);
 	}
 
 newline:
@@ -56,7 +61,7 @@ int main() {
 		write(1, "> ", 2);
 		linelen = readline(&buf, &buflen, &readlen, linelen);
 		write(1, buf, linelen);
-		if (linelen <= 1) {
+		if (linelen <= 0) {
 			break;
 		}
 	}
