@@ -18,6 +18,7 @@ size_t readline(char **buf, size_t *len, size_t *readlen, size_t linelen) {
 
 	linelen = 0;
 	while (1) {
+		ssize_t read_ret;
 		for (; linelen < *readlen; linelen++) {
 			if ((*buf)[linelen] == '\n') {
 				goto newline;
@@ -29,17 +30,20 @@ size_t readline(char **buf, size_t *len, size_t *readlen, size_t linelen) {
 			*len *= 2;
 		}
 
-		ssize_t read_ret = read(0, *buf + *readlen, *len - *readlen);
+		read_ret = read(0, *buf + *readlen, *len - *readlen);
 		if (read_ret <= 0) {
 			return 0;
 		}
 		*readlen += read_ret;
-		//*readlen += read(0, *buf + *readlen, *len - *readlen);
 	}
 
 newline:
 	linelen++; // Count the \n too
 	return linelen;
+}
+
+void scan(char *line, void (*handle)(char *, size_t)) {
+	size_t cur = 0;
 }
 
 const char *test = "hi there\na\n";
