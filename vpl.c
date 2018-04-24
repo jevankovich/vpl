@@ -3,6 +3,8 @@
 
 #include <unistd.h>
 
+#include "scan.h"
+
 #define DEFAULT_BUF 1
 size_t readline(char **buf, size_t *len, size_t *readlen, size_t linelen) {
 	if (*buf == NULL || *len == 0) {
@@ -42,52 +44,15 @@ newline:
 	return linelen;
 }
 
-enum token {
-	SPACE_TOK,
-	NUMBER_TOK,
-	IDENT_TOK,
-	NEWLINE_TOK
-};
-
-size_t space_tok(char *line) {
-	size_t i;
-	for (i = 0; (line[i] == ' ' || line[i] == '\t') && line[i] != '\n'; i++) {}
-	return i;
-}
-
-size_t number_tok(char *line) {
-	size_t i;
-	for (i = 0; line[i] != ' ' && line[i] != '\t' && line[i] != '\n'; i++) {}
-	return i;
-}
-
-size_t ident_tok(char *line) {
-	size_t i;
-	for (i = 0; line[i] != ' ' && line[i] != '\t' && line[i] != '\n'; i++) {}
-	return i;
-}
-
-void scan(char *line) {
-	while (1) {
-		size_t len = 0;
-		if (*line == ' ' || *line == '\t') {
-			len = space_tok(line);
-			write(1, "_\n", 2);
-		} else if (*line >= '0' && *line <= '9') {
-			len = number_tok(line);
-			write(1, line, len);
-			write(1, "\n", 1);
-		} else if (*line == '\n') {
-			write(1, "\\n\n", 3);
-			break;
-		} else {
-			len = ident_tok(line);
-			write(1, line, len);
-			write(1, "\n", 1);
-		}
-
-		line += len;
+void print_tok(struct scan_item item) {
+	write(1, "<", 1);
+	if (item.type == SCAN_EOL) {
+		write(1, "\\n", 2);
+	} else {
+		write(1, item.value, strlen(item.value));
 	}
+	write(1, ">", 1);
+	free(item.value);
 }
 
 int main() {
@@ -103,6 +68,7 @@ int main() {
 			break;
 		}
 
-		scan(buf);
+		scan(buf, print_tok);
+		write(1, "\n", 1);
 	}
 }
