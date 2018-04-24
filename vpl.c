@@ -42,31 +42,67 @@ newline:
 	return linelen;
 }
 
-void scan(char *line, void (*handle)(char *, size_t)) {
-	size_t cur = 0;
+enum token {
+	SPACE_TOK,
+	NUMBER_TOK,
+	IDENT_TOK,
+	NEWLINE_TOK
+};
+
+size_t space_tok(char *line) {
+	size_t i;
+	for (i = 0; (line[i] == ' ' || line[i] == '\t') && line[i] != '\n'; i++) {}
+	return i;
 }
 
-const char *test = "hi there\na\n";
+size_t number_tok(char *line) {
+	size_t i;
+	for (i = 0; line[i] != ' ' && line[i] != '\t' && line[i] != '\n'; i++) {}
+	return i;
+}
+
+size_t ident_tok(char *line) {
+	size_t i;
+	for (i = 0; line[i] != ' ' && line[i] != '\t' && line[i] != '\n'; i++) {}
+	return i;
+}
+
+void scan(char *line) {
+	while (1) {
+		size_t len = 0;
+		if (*line == ' ' || *line == '\t') {
+			len = space_tok(line);
+			write(1, "_\n", 2);
+		} else if (*line >= '0' && *line <= '9') {
+			len = number_tok(line);
+			write(1, line, len);
+			write(1, "\n", 1);
+		} else if (*line == '\n') {
+			write(1, "\\n\n", 3);
+			break;
+		} else {
+			len = ident_tok(line);
+			write(1, line, len);
+			write(1, "\n", 1);
+		}
+
+		line += len;
+	}
+}
+
 int main() {
 	char *buf = NULL;
 	size_t buflen = 0;
 	size_t readlen = 0;
 	size_t linelen = 0;
 
-	/*
-	buf = malloc(512);
-	strcpy(buf, test);
-	buflen = 512;
-	readlen = strlen(test);
-	linelen = 0;
-	*/
-
 	while (1) {
 		write(1, "> ", 2);
 		linelen = readline(&buf, &buflen, &readlen, linelen);
-		write(1, buf, linelen);
 		if (linelen <= 0) {
 			break;
 		}
+
+		scan(buf);
 	}
 }
