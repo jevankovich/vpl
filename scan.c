@@ -76,7 +76,17 @@ struct state space(struct state st, scan_func fn) {
 struct state ident(struct state st, scan_func fn) {
 	size_t i;
 	for (i = 0; !issym(st.buf[i]) && !isspace(st.buf[i]); i++) {}
-	emitn(fn, SCAN_SPACE, st.buf, i);
+	emitn(fn, SCAN_IDENT, st.buf, i);
+
+	st.fn = start;
+	st.buf += i;
+	return st;
+}
+
+struct state numeric(struct state st, scan_func fn) {
+	size_t i;
+	for (i = 0; !issym(st.buf[i]) && !isspace(st.buf[i]); i++) {}
+	emitn(fn, SCAN_NUMBER, st.buf, i);
 
 	st.fn = start;
 	st.buf += i;
@@ -121,16 +131,6 @@ struct state sym(struct state st, scan_func fn) {
 	st.fn = start;
 	st.buf++;
 
-	return st;
-}
-
-struct state numeric(struct state st, scan_func fn) {
-	size_t i;
-	for (i = 0; !issym(st.buf[i]) && !isspace(st.buf[i]); i++) {}
-	emitn(fn, SCAN_SPACE, st.buf, i);
-
-	st.fn = start;
-	st.buf += i;
 	return st;
 }
 
