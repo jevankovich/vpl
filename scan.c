@@ -4,139 +4,258 @@
 #include <stdlib.h>
 #include <ctype.h>
 
-struct state;
-typedef struct state (state_func)(struct state, scan_func);
-struct state {
+struct lex_state;
+typedef void (state_func)(struct lex_state *);
+struct lex_state {
 	state_func *fn;
+
 	char *buf;
+	size_t start;
+	size_t pos;
+	
+	void *(*callback)(struct lex_item, void *);
+	void *userdata;
 };
 
-state_func start, eol, space, ident, numeric, sym;
-
-void emitn(scan_func fn, enum scan_type type, char *str, size_t n) {
-	char *buf = malloc(n + 1);
-	memcpy(buf, str, n);
-	buf[n] = '\0';
-
-	struct scan_item item = {type, buf};
-	fn(item);
-}
+void emit(struct lex_state *st, enum token_type t) {
+	size_t len;
+	struct lex_item tok;
 	
-void error(scan_func fn, char *errstring) {
-	emitn(fn, SCAN_ERROR, errstring, strlen(errstring));
+	tok.type = t;
+
+	len = st->pos - st->start;
+	tok.value = malloc(len + 1);
+
+	memcpy(tok.value, st->buf + st->start, len);
+	tok.value[len] = '\0';
+
+	st->start = st->pos;
+
+	st->userdata = st->callback(tok, st->userdata);
 }
 
-int issym(char c) {
-	static const char *syms = "=|&*^-+/";
-	for (int i = 0; syms[i]; i++) {
-		if (c == syms[i]) {
-			return 1;
-		}
+void ignore(struct lex_state *st) {
+	st->start = st->pos;
+}
+
+void error(struct lex_state *st, char *errstring) {
+	size_t len;
+	struct lex_item tok;
+
+	tok.type = TOKEN_ERROR;
+
+	len = strlen(errstring);
+	tok.value = malloc(len + 1);
+
+	memcpy(tok.value, errstring, len);
+	tok.value[len] = '\0';
+
+	st->userdata = st->callback(tok, st->userdata);
+
+	st->fn = NULL;
+}
+
+char next(struct lex_state *st) {
+	return st->buf[st->pos++];
+}
+
+char peek(struct lex_state *st) {
+	return st->buf[st->pos];
+}
+
+void backup(struct lex_state *st) {
+	st->pos--;
+}
+
+int accept(struct lex_state *l, const char *valid) {
+	char c = next(l);
+	for (size_t i = 0; valid[i]; i++) {
+		if (c == valid[i]) return 1;
 	}
+
+	backup(l);
 	return 0;
 }
 
-struct state start(struct state st, scan_func fn) {
-	if (*(st.buf) == '\n') {
-		st.fn = eol;
-	} else if (isspace(*(st.buf))) {
-		st.fn = space;
-	} else if (isalpha(*(st.buf))) {
-		st.fn = ident;
-	} else if (isdigit(*(st.buf))) {
-		st.fn = numeric;
-	} else if (issym(*(st.buf))) {
-		st.fn = sym;
+void acceptrun(struct lex_state *l, const char *valid) {
+	while (accept(l, valid)) {}
+}
+
+int acceptf(struct lex_state *l, int (*pred)(int)) {
+	if (pred(next(l))) return 1;
+	backup(l);
+
+	return 0;
+}
+
+void acceptrunf(struct lex_state *l, int (*pred)(int)) {
+	while (acceptf(l, pred)) {}
+}
+
+state_func start, eol, space, ident, numeric, sym;
+
+void start(struct lex_state *l) {
+	char c = peek(l);
+	if (c == '\n' || c == '\r') {
+		l->fn = eol;
+	} else if (isspace(c)) {
+		l->fn = space;
+	} else if (isdigit(c) || c == '+' || c == '-') {
+		l->fn = numeric;
+	} else if (isalpha(c)) {
+		l->fn = ident;
 	} else {
-		error(fn, "Unexpected character in input");
-		st.fn = NULL;
+		l->fn = sym;
 	}
-		
-	return st;
 }
 
-struct state eol(struct state st, scan_func fn) {
-	emitn(fn, SCAN_EOL, st.buf, 1);
+void eol(struct lex_state *l) {
+	acceptrun(l, "\r\n");
+	emit(l, TOKEN_EOL);
+
+	l->fn = NULL;
+}
+
+void space(struct lex_state *l) {
+	acceptrun(l, "\t\f\v ");
+	ignore(l);
+
+	l->fn = start;
+}
+
+void ident(struct lex_state *l) {
+	acceptf(l, isalpha);
+	acceptrunf(l, isalnum);
+	emit(l, TOKEN_IDENT);
+
+	l->fn = start;
+}
+
+void numeric(struct lex_state *l) {
+	if (accept(l, "+-") && !acceptf(l, isdigit)) {
+		l->fn = sym;
+		backup(l);
+		return;
+	}
+
+	acceptrunf(l, isdigit);
+	if (accept(l, ".")) {
+		acceptrunf(l, isdigit);
+	}
+
+	if (accept(l, "eE")) {
+		accept(l, "+-");
+		if (!acceptf(l, isdigit)) {
+			error(l, "Scientific notation must be followed by a number");
+			return;
+		}
+		acceptrunf(l, isdigit);
+	}
+
+	if (isalnum(peek(l))) {
+		error(l, "A number must be separated from an identifier by a space");
+		return;
+	}
+
+	emit(l, TOKEN_NUMBER);
+
+	if (peek(l) == '+' || peek(l) == '-') {
+		l->fn = sym;
+	} else {
+		l->fn = start;
+	}
+}
+
+void sym(struct lex_state *l) {
+	char c = next(l);
+	enum token_type t;
+
+	switch (c) {
+		case '(':
+			t = TOKEN_LPAR;
+			break;
+		case ')':
+			t = TOKEN_RPAR;
+			break;
+		case '=':
+			t = TOKEN_EQ;
+			break;
+		case '|':
+			t = TOKEN_PIPE;
+			break;
+		case '&':
+			t = TOKEN_AND;
+			break;
+		case '*':
+			t = TOKEN_STAR;
+			break;
+		case '-':
+			t = TOKEN_MINUS;
+			break;
+		case '+':
+			t = TOKEN_PLUS;
+			break;
+		case '/':
+			t = TOKEN_SLASH;
+			break;
+		default:
+			error(l, "Unknown symbol found");
+			return;
+	}
+
+	emit(l, t);
+	l->fn = start;
+}
+
+void free_items(struct lex_items *items) {
+	for (int i = 0; i < items->len; i++) {
+		free(items->items + i);
+	}
+	items->len = 0;
+}
+
+void *scan(char *line, void *(*callback)(struct lex_item, void *), void *userdata) {
+	struct lex_state l;
+	l.fn = start;
 	
-	st.fn = NULL;
-	st.buf++;
-	return st;
-}
+	l.buf = line;
+	l.start = 0;
+	l.pos = 0;
 
-struct state space(struct state st, scan_func fn) {
-	size_t i;
-	for (i = 0; st.buf[i] != '\n' && isspace(st.buf[i]); i++) {}
-	emitn(fn, SCAN_SPACE, st.buf, i);
-	
-	st.fn = start;
-	st.buf += i;
-	return st;
-}
+	l.callback = callback;
+	l.userdata = userdata;
 
-struct state ident(struct state st, scan_func fn) {
-	size_t i;
-	for (i = 0; !issym(st.buf[i]) && !isspace(st.buf[i]); i++) {}
-	emitn(fn, SCAN_IDENT, st.buf, i);
-
-	st.fn = start;
-	st.buf += i;
-	return st;
-}
-
-struct state numeric(struct state st, scan_func fn) {
-	size_t i;
-	for (i = 0; !issym(st.buf[i]) && !isspace(st.buf[i]); i++) {}
-	emitn(fn, SCAN_NUMBER, st.buf, i);
-
-	st.fn = start;
-	st.buf += i;
-	return st;
-}
-
-struct state sym(struct state st, scan_func fn) {
-	enum scan_type type;
-
-	switch (*(st.buf)) {
-	case '=':
-		type = SCAN_EQ;
-		break;
-	case '|':
-		type = SCAN_PIPE;
-		break;
-	case '&':
-		type = SCAN_AND;
-		break;
-	case '*':
-		type = SCAN_STAR;
-		break;
-	case '^':
-		type = SCAN_CARET;
-		break;
-	case '-':
-		type = SCAN_MINUS;
-		break;
-	case '+':
-		type = SCAN_PLUS;
-		break;
-	case '/':
-		type = SCAN_SLASH;
-		break;
-	default:
-		error(fn, "How did this even happen?");
-		st.fn = NULL;
-		st.buf++;
-		return st;
+	while (l.fn != NULL) {
+		l.fn(&l);
 	}
-	emitn(fn, type, st.buf, 1);
-	st.fn = start;
-	st.buf++;
 
-	return st;
+	return l.userdata;
 }
 
-void scan(char *line, scan_func handle) {
-	struct state st = {&start, line};
-	while (st.fn) {
-		st = st.fn(st, handle);
+void *collect(struct lex_item tok, void *userdata) {
+	struct lex_items *items;
+	if (userdata == NULL) {
+		userdata = malloc(sizeof(struct lex_items));
+		items = (struct lex_items *)userdata;
+
+		items->cap = 1;
+		items->len = 0;
+		items->items = malloc(sizeof(struct lex_item));
 	}
+	items = (struct lex_items *)userdata;
+
+	if (items->cap == 0 || items->items == NULL) {
+		items->cap = 1;
+		items->len = 0;
+		items->items = malloc(sizeof(struct lex_item));
+	}
+
+	if (items->len == items->cap) {
+		items->items = realloc(items->items, 2 * items->cap * sizeof(struct lex_item));
+		items->cap *= 2;
+	}
+
+	items->items[items->len++] = tok;
+
+	return items;
 }
