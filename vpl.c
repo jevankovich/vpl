@@ -41,5 +41,7 @@ int main() {
 			print_tok(items.items[i]);
 		}
 		write(1, "\n", 1);
+
+		free_items(&items);
 	}
 }

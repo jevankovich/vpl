@@ -167,49 +167,30 @@ void numeric(struct lex_state *l) {
 }
 
 void sym(struct lex_state *l) {
-	char c = next(l);
-	enum token_type t;
+	l->fn = start;
 
-	switch (c) {
-		case '(':
-			t = TOKEN_LPAR;
-			break;
-		case ')':
-			t = TOKEN_RPAR;
-			break;
-		case '=':
-			t = TOKEN_EQ;
-			break;
-		case '|':
-			t = TOKEN_PIPE;
-			break;
-		case '&':
-			t = TOKEN_AND;
-			break;
-		case '*':
-			t = TOKEN_STAR;
-			break;
-		case '-':
-			t = TOKEN_MINUS;
-			break;
-		case '+':
-			t = TOKEN_PLUS;
-			break;
-		case '/':
-			t = TOKEN_SLASH;
-			break;
-		default:
-			error(l, "Unknown symbol found");
-			return;
+	if (accept(l, "|&*/+-")) {
+		emit(l, TOKEN_SYM);
+	} else if (accept(l, "=")) {
+		emit(l, TOKEN_EQ);
+	} else if (accept(l, "(")) {
+		emit(l, TOKEN_LPAR);
+	} else if (accept(l, ")")) {
+		emit(l, TOKEN_RPAR);
+	} else if (accept(l, "[")) {
+		emit(l, TOKEN_LBRACK);
+	} else if (accept(l, "]")) {
+		emit(l, TOKEN_RBRACK);
+	} else {
+		error(l, "Unknown symbol found");
 	}
 
-	emit(l, t);
-	l->fn = start;
+	return;
 }
 
 void free_items(struct lex_items *items) {
 	for (int i = 0; i < items->len; i++) {
-		free(items->items + i);
+		free(items->items[i].value);
 	}
 	items->len = 0;
 }
