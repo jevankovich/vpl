@@ -17,7 +17,7 @@ struct lex_state {
 	void *userdata;
 };
 
-void emit(struct lex_state *st, enum token_type t) {
+static void emit(struct lex_state *st, enum token_type t) {
 	size_t len;
 	struct lex_item tok;
 	
@@ -34,11 +34,11 @@ void emit(struct lex_state *st, enum token_type t) {
 	st->userdata = st->callback(tok, st->userdata);
 }
 
-void ignore(struct lex_state *st) {
+static void ignore(struct lex_state *st) {
 	st->start = st->pos;
 }
 
-void error(struct lex_state *st, char *errstring) {
+static void error(struct lex_state *st, char *errstring) {
 	size_t len;
 	struct lex_item tok;
 
@@ -55,19 +55,19 @@ void error(struct lex_state *st, char *errstring) {
 	st->fn = NULL;
 }
 
-char next(struct lex_state *st) {
+static char next(struct lex_state *st) {
 	return st->buf[st->pos++];
 }
 
-char peek(struct lex_state *st) {
+static char peek(struct lex_state *st) {
 	return st->buf[st->pos];
 }
 
-void backup(struct lex_state *st) {
+static void backup(struct lex_state *st) {
 	st->pos--;
 }
 
-int accept(struct lex_state *l, const char *valid) {
+static int accept(struct lex_state *l, const char *valid) {
 	char c = next(l);
 	for (size_t i = 0; valid[i]; i++) {
 		if (c == valid[i]) return 1;
@@ -77,24 +77,29 @@ int accept(struct lex_state *l, const char *valid) {
 	return 0;
 }
 
-void acceptrun(struct lex_state *l, const char *valid) {
+static void acceptrun(struct lex_state *l, const char *valid) {
 	while (accept(l, valid)) {}
 }
 
-int acceptf(struct lex_state *l, int (*pred)(int)) {
+static int acceptf(struct lex_state *l, int (*pred)(int)) {
 	if (pred(next(l))) return 1;
 	backup(l);
 
 	return 0;
 }
 
-void acceptrunf(struct lex_state *l, int (*pred)(int)) {
+static void acceptrunf(struct lex_state *l, int (*pred)(int)) {
 	while (acceptf(l, pred)) {}
 }
 
-state_func start, eol, space, ident, numeric, sym;
+static state_func start;
+static state_func eol;
+static state_func space;
+static state_func ident;
+static state_func numeric;
+static state_func sym;
 
-void start(struct lex_state *l) {
+static void start(struct lex_state *l) {
 	char c = peek(l);
 	if (c == '\n' || c == '\r') {
 		l->fn = eol;
@@ -109,21 +114,21 @@ void start(struct lex_state *l) {
 	}
 }
 
-void eol(struct lex_state *l) {
+static void eol(struct lex_state *l) {
 	acceptrun(l, "\r\n");
 	emit(l, TOKEN_EOL);
 
 	l->fn = NULL;
 }
 
-void space(struct lex_state *l) {
+static void space(struct lex_state *l) {
 	acceptrun(l, "\t\f\v ");
 	ignore(l);
 
 	l->fn = start;
 }
 
-void ident(struct lex_state *l) {
+static void ident(struct lex_state *l) {
 	acceptf(l, isalpha);
 	acceptrunf(l, isalnum);
 	emit(l, TOKEN_IDENT);
@@ -131,7 +136,7 @@ void ident(struct lex_state *l) {
 	l->fn = start;
 }
 
-void numeric(struct lex_state *l) {
+static void numeric(struct lex_state *l) {
 	if (accept(l, "+-") && !acceptf(l, isdigit)) {
 		l->fn = sym;
 		backup(l);
@@ -166,7 +171,7 @@ void numeric(struct lex_state *l) {
 	}
 }
 
-void sym(struct lex_state *l) {
+static void sym(struct lex_state *l) {
 	l->fn = start;
 
 	if (accept(l, "|&*/+-")) {

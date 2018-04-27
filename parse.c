@@ -1,6 +1,20 @@
 #include "parse.h"
 #include "scan.h"
 
+#include <stdlib.h>
+
+struct parser;
+
+struct vector;
+struct operand;
+struct expr;
+struct statement;
+
+static struct vector *vector(struct parser *);
+static struct operand *operand(struct parser *);
+static struct expr *expr(struct parser *);
+static struct statement statement(struct parser *);
+
 struct parser {
 	int error;
 	char *errorstring;
@@ -9,15 +23,15 @@ struct parser {
 	struct lex_items toks;
 };
 
-struct lex_item peek(struct parser *p) {
-	return p->lex_items[p->pos];
+static struct lex_item peek(struct parser *p) {
+	return p->toks.items[p->pos];
 }
 
-struct lex_item next(struct parser *p) {
-	return p->lex_items[p->pos++];
+static struct lex_item next(struct parser *p) {
+	return p->toks.items[p->pos++];
 }
 
-void backup(struct parser *p) {
+static void backup(struct parser *p) {
 	p->pos--;
 }
 
@@ -33,7 +47,7 @@ void backup(struct parser *p) {
 //   symbol
 //   identifier
 
-char *op(struct parser *p) {
+static char *op(struct parser *p) {
 	switch (peek(p).type) {
 		case TOKEN_ERROR:
 			p->error = 1;
@@ -57,7 +71,7 @@ struct vector {
 	struct vector *next;
 };
 
-struct vector *vector(struct parser *p) {
+static struct vector *vector(struct parser *p) {
 	if (peek(p).type != TOKEN_NUMBER) {
 		p->error = 1;
 		p->errorstring = "Expected a number";
@@ -90,7 +104,7 @@ enum operand_type {
 struct operand {
 	enum operand_type type;
 	union {
-		struct expr *expr // ( Expr )
+		struct expr *expr; // ( Expr )
 		struct vector *vector; // Vector
 		char *ident; // identifier
 	};
@@ -99,7 +113,7 @@ struct operand {
 	struct expr *index; // Operand [ Expr ]
 };
 
-struct operand *operand(struct parser *p) {
+static struct operand *operand(struct parser *p) {
 	struct operand *ret = malloc(sizeof(*ret));
 
 	struct lex_item tok = peek(p);
@@ -155,7 +169,7 @@ struct expr {
 	struct expr *expr;
 };
 
-struct expr *expr(struct parser *p) {
+static struct expr *expr(struct parser *p) {
 	struct expr *ret = malloc(sizeof(*ret));
 	ret->operator = NULL;
 	ret->op = NULL;
@@ -166,7 +180,7 @@ struct expr *expr(struct parser *p) {
 		ret->operator = op(p);
 		ret->expr = expr(p);
 	} else {
-		ret->operand = operand(p);
+		ret->op = operand(p);
 		if (peek(p).type == TOKEN_SYM) {
 			ret->operator = op(p);
 			ret->expr = expr(p);
@@ -177,10 +191,23 @@ struct expr *expr(struct parser *p) {
 }
 
 // Statement
-//   ident '=' Expr
-//   Expr
+//   ident '=' Expr '\n'
+//   Expr '\n'
 struct statement statement(struct parser *p) {
-	next(p);
-	if (peek(p).type == TOKEN_EQ) {
+	struct statement ret;
+	struct lex_item tok = next(p);
+
+	ret.error = 0;
+
+	if (tok.type == TOKEN_IDENT && peek(p).type == TOKEN_EQ) {
+		next(p);
+		ret.var = tok.value;
+		ret.expr = expr(p);
+	} else {
+		backup(p);
+		ret.var = NULL;
+		ret.expr = expr(p);
 	}
+
+	return ret;
 }
