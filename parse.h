@@ -2,16 +2,16 @@
 #define PARSE_H
 #include "scan.h"
 
+struct vector;
+struct operand;
 struct expr;
+struct statement;
 
-// Statement
-//   identifier '=' Expr
-//   Expr
-struct statement {
-	int error; // If !=0, var contains the error string
-	char *var;
-	struct expr *expr;
+struct value {
+	size_t dims;
+	size_t *size;
+	double *data;
 };
 
-struct statement *parse(struct lex_items);
+struct value parse(struct lex_items);
 #endif

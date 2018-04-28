@@ -5,6 +5,7 @@
 
 #include "readline.h"
 #include "scan.h"
+#include "parse.h"
 
 void print_tok(struct lex_item item) {
 	if (item.type == TOKEN_EOL) {
@@ -42,6 +43,7 @@ int main() {
 		}
 		write(1, "\n", 1);
 
+		parse(items);
 		free_items(&items);
 	}
 }

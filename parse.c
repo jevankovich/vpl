@@ -2,13 +2,9 @@
 #include "scan.h"
 
 #include <stdlib.h>
+#include <stdio.h>
 
 struct parser;
-
-struct vector;
-struct operand;
-struct expr;
-struct statement;
 
 static struct vector *vector(struct parser *);
 static struct operand *operand(struct parser *);
@@ -48,6 +44,7 @@ static void backup(struct parser *p) {
 //   identifier
 
 static char *op(struct parser *p) {
+	printf("op(<%s>...)\n", peek(p).value);
 	switch (peek(p).type) {
 		case TOKEN_ERROR:
 			p->error = 1;
@@ -72,6 +69,7 @@ struct vector {
 };
 
 static struct vector *vector(struct parser *p) {
+	printf("vector(<%s>...)\n", peek(p).value);
 	if (peek(p).type != TOKEN_NUMBER) {
 		p->error = 1;
 		p->errorstring = "Expected a number";
@@ -114,6 +112,7 @@ struct operand {
 };
 
 static struct operand *operand(struct parser *p) {
+	printf("operand(<%s>...)\n", peek(p).value);
 	struct operand *ret = malloc(sizeof(*ret));
 
 	struct lex_item tok = peek(p);
@@ -170,13 +169,19 @@ struct expr {
 };
 
 static struct expr *expr(struct parser *p) {
+	printf("expr(<%s>...)\n", peek(p).value);
 	struct expr *ret = malloc(sizeof(*ret));
 	ret->operator = NULL;
 	ret->op = NULL;
 	ret->expr = NULL;
 
 	struct lex_item tok = peek(p);
-	if (tok.type == TOKEN_SYM) {
+	if (tok.type == TOKEN_EOL) {
+		p->error = 1;
+		p->errorstring = "Found end of line, expected expression";
+		free(ret);
+		return NULL;
+	} else if (tok.type == TOKEN_SYM) {
 		ret->operator = op(p);
 		ret->expr = expr(p);
 	} else {
@@ -193,7 +198,14 @@ static struct expr *expr(struct parser *p) {
 // Statement
 //   ident '=' Expr '\n'
 //   Expr '\n'
+struct statement {
+	int error; // If !=0, var contains the error string
+	char *var;
+	struct expr *expr;
+};
+
 struct statement statement(struct parser *p) {
+	printf("statement(<%s>...)\n", peek(p).value);
 	struct statement ret;
 	struct lex_item tok = next(p);
 
@@ -207,6 +219,30 @@ struct statement statement(struct parser *p) {
 		backup(p);
 		ret.var = NULL;
 		ret.expr = expr(p);
+	}
+
+	if (next(p).type != TOKEN_EOL) {
+		p->error = 1;
+		p->errorstring = "Unexpected tokens before EOL";
+	}
+
+	return ret;
+}
+
+struct statement *parse(struct lex_items toks) {
+	struct statement *ret = malloc(sizeof(*ret));
+	struct parser p;
+
+	p.error = 0;
+	p.errorstring = NULL;
+
+	p.pos = 0;
+	p.toks = toks;
+
+	*ret = statement(&p);
+
+	if (p.error) {
+		printf("%s\n", p.errorstring);
 	}
 
 	return ret;

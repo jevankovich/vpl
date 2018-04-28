@@ -174,7 +174,7 @@ static void numeric(struct lex_state *l) {
 static void sym(struct lex_state *l) {
 	l->fn = start;
 
-	if (accept(l, "|&*/+-")) {
+	if (accept(l, "*/+-")) {
 		emit(l, TOKEN_SYM);
 	} else if (accept(l, "=")) {
 		emit(l, TOKEN_EQ);
